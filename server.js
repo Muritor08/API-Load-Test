@@ -13,7 +13,7 @@ function now() {
 }
 
 function parseCurl(curl) {
-  // Remove line breaks + escaped slashes
+  // Remove line breaks and backslashes
   curl = curl.replace(/\\\n/g, " ").replace(/\n/g, " ");
 
   const result = {
@@ -31,19 +31,16 @@ function parseCurl(curl) {
     result.method = methodMatch[1].toUpperCase();
   }
 
-  // If data exists and no -X, assume POST
   if (!methodMatch && curl.includes("--data")) {
     result.method = "POST";
   }
 
   // --------------------
-  // URL
+  // ✅ FIXED URL PARSER
   // --------------------
-  const urlMatch = curl.match(
-    /curl\s+(?:--\w+\s+)*["']?(https?:\/\/[^\s"']+)/i,
-  );
+  const urlMatch = curl.match(/https?:\/\/[^\s"']+/i);
   if (urlMatch) {
-    result.url = urlMatch[1];
+    result.url = urlMatch[0];
   }
 
   // --------------------
@@ -61,14 +58,13 @@ function parseCurl(curl) {
   }
 
   // --------------------
-  // BODY (data / data-raw / data-binary)
+  // BODY
   // --------------------
   const dataRegex = /--data(?:-raw|-binary)?\s+(['"])(.*?)\1/is;
   const dataMatch = curl.match(dataRegex);
 
   if (dataMatch) {
     const rawData = dataMatch[2].trim();
-
     try {
       result.data = JSON.parse(rawData);
     } catch {
@@ -87,6 +83,12 @@ app.post("/run", async (req, res) => {
   }
 
   const { method, url, headers, data } = parseCurl(curl);
+
+  // ✅ Safety check
+  if (!url) {
+    return res.status(400).json({ error: "Invalid curl: URL not found" });
+  }
+
   const logs = [];
 
   async function sendRequest(index) {
@@ -104,6 +106,7 @@ app.post("/run", async (req, res) => {
         headers,
         data,
       });
+
       log.push(`RESPONSE_TIME: ${now()}`);
       log.push(`STATUS: ${response.status}`);
       log.push(`RESPONSE: ${JSON.stringify(response.data)}`);
